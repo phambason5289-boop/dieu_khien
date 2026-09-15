@@ -1,249 +1,1207 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-  <title>Máy lạnh Funiki</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+
+  <title>Điều khiển 2 máy lạnh Funiki</title>
+
+  <!-- MQTT.js -->
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
   <style>
     :root {
       --bg: #0f172a;
       --card: #1e293b;
       --text: #e2e8f0;
       --muted: #94a3b8;
+
       --green: #22c55e;
       --red: #ef4444;
       --blue: #3b82f6;
       --purple: #8b5cf6;
       --orange: #f97316;
       --teal: #14b8a6;
+      --border: #334155;
     }
-    * { box-sizing: border-box; }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family:
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+
       background: var(--bg);
       color: var(--text);
+
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+
       padding: 24px 16px;
     }
-    h1 { margin: 0 0 6px; font-size: 1.6rem; }
-    .status {
-      font-size: 0.9rem;
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      margin: auto;
+    }
+
+    /* ================= HEADER ================= */
+
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.8rem;
+    }
+
+    .subtitle {
       color: var(--muted);
-      margin-bottom: 28px;
-      display: flex;
+      font-size: 0.9rem;
+      margin-bottom: 14px;
+    }
+
+    .mqtt-status {
+      display: inline-flex;
       align-items: center;
       gap: 8px;
+
+      padding: 8px 14px;
+
+      border: 1px solid var(--border);
+      border-radius: 20px;
+
+      background: #111827;
+
+      font-size: 0.85rem;
     }
-    .dot {
-      width: 10px; height: 10px;
+
+    .mqtt-dot {
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
       background: #64748b;
     }
-    .dot.online { background: var(--green); box-shadow: 0 0 8px var(--green); }
-    .dot.offline { background: var(--red); }
+
+    .mqtt-dot.online {
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+    }
+
+    .mqtt-dot.offline {
+      background: var(--red);
+    }
+
+    /* ================= TWO CARDS ================= */
+
+    .machines {
+      display: grid;
+
+      grid-template-columns: repeat(2, 1fr);
+
+      gap: 20px;
+    }
 
     .card {
       background: var(--card);
+
       border-radius: 20px;
-      padding: 28px 24px;
-      width: 100%;
-      max-width: 380px;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.35);
+
+      padding: 24px;
+
+      box-shadow:
+        0 20px 40px rgba(0, 0, 0, 0.35);
+
+      border: 1px solid rgba(255,255,255,0.04);
     }
+
+    .machine-header {
+      display: flex;
+
+      justify-content: space-between;
+
+      align-items: center;
+
+      margin-bottom: 22px;
+    }
+
+    .machine-name {
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+
+    .device-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+
+      color: var(--muted);
+
+      font-size: 0.78rem;
+    }
+
+    .device-dot {
+      width: 8px;
+      height: 8px;
+
+      border-radius: 50%;
+
+      background: #64748b;
+    }
+
+    .device-dot.online {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+
+    .device-dot.offline {
+      background: var(--red);
+    }
+
+    /* ================= TEMPERATURE ================= */
+
     .temp-box {
       text-align: center;
+
       margin-bottom: 24px;
     }
+
     .temp-value {
-      font-size: 4.5rem;
+      font-size: 4.2rem;
+
       font-weight: 700;
+
       line-height: 1;
     }
-    .temp-unit { font-size: 1.8rem; vertical-align: super; }
-    .mode-label {
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 0.95rem;
+
+    .temp-unit {
+      font-size: 1.6rem;
+
+      vertical-align: super;
     }
+
+    .mode-label {
+      margin-top: 10px;
+
+      color: var(--muted);
+
+      font-size: 0.9rem;
+
+      min-height: 22px;
+    }
+
+    /* ================= BUTTON GRID ================= */
 
     .grid {
       display: grid;
+
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
+
+      gap: 10px;
     }
+
     button {
       border: none;
-      border-radius: 14px;
-      padding: 16px 12px;
-      font-size: 1rem;
-      font-weight: 600;
-      color: white;
-      cursor: pointer;
-      transition: transform 0.15s, opacity 0.15s;
-    }
-    button:active { transform: scale(0.96); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .btn-on   { background: var(--green); }
-    .btn-off  { background: var(--red); }
-    .btn-temp { background: var(--blue); }
-    .btn-mode { background: var(--purple); }
-    .btn-fan  { background: var(--orange); }
-    .btn-extra{ background: var(--teal); }
-    .full { grid-column: span 2; }
+      border-radius: 12px;
+
+      padding: 14px 8px;
+
+      font-size: 0.9rem;
+
+      font-weight: 600;
+
+      color: white;
+
+      cursor: pointer;
+
+      transition:
+        transform 0.15s,
+        opacity 0.15s;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    button:active {
+      transform: scale(0.96);
+    }
+
+    button:disabled {
+      opacity: 0.45;
+
+      cursor: not-allowed;
+    }
+
+    .btn-on {
+      background: var(--green);
+    }
+
+    .btn-off {
+      background: var(--red);
+    }
+
+    .btn-temp {
+      background: var(--blue);
+    }
+
+    .btn-mode {
+      background: var(--purple);
+    }
+
+    .btn-fan {
+      background: var(--orange);
+    }
+
+    .btn-extra {
+      background: var(--teal);
+    }
+
+    .full {
+      grid-column: span 2;
+    }
 
     .section-title {
       grid-column: span 2;
-      font-size: 0.85rem;
+
+      font-size: 0.78rem;
+
       color: var(--muted);
-      margin: 8px 0 0;
+
       text-align: center;
+
+      margin-top: 8px;
+
+      padding-top: 5px;
+
+      border-top: 1px solid var(--border);
     }
 
-    .footer {
-      margin-top: 24px;
-      font-size: 0.8rem;
+    /* ================= FOOTER ================= */
+
+    footer {
+      text-align: center;
+
+      margin-top: 28px;
+
       color: var(--muted);
+
+      font-size: 0.78rem;
+    }
+
+    /* ================= MOBILE ================= */
+
+    @media (max-width: 700px) {
+
+      .machines {
+        grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      .card {
+        padding: 20px;
+      }
+
+      .temp-value {
+        font-size: 3.8rem;
+      }
     }
   </style>
 </head>
+
 <body>
-  <h1>Máy lạnh Funiki</h1>
-  <div class="status">
-    <div class="dot" id="dot"></div>
-    <span id="statusText">Đang kết nối...</span>
-  </div>
 
-  <div class="card">
-    <div class="temp-box">
-      <div>
-        <span class="temp-value" id="temp">--</span>
-        <span class="temp-unit">°C</span>
+<div class="container">
+
+  <!-- ================= HEADER ================= -->
+
+  <header>
+
+    <h1>Điều khiển máy lạnh Funiki</h1>
+
+    <div class="subtitle">
+      Hệ thống điều khiển 2 máy lạnh qua MQTT
+    </div>
+
+    <div class="mqtt-status">
+
+      <div
+        class="mqtt-dot"
+        id="mqttDot">
       </div>
-      <div class="mode-label" id="modeLabel">Chưa có dữ liệu</div>
+
+      <span id="mqttStatus">
+        Đang kết nối MQTT...
+      </span>
+
     </div>
 
-    <div class="grid">
-      <button class="btn-on"  onclick="send('on')">Bật</button>
-      <button class="btn-off" onclick="send('off')">Tắt</button>
+  </header>
 
-      <button class="btn-temp" onclick="send('tempup')">Nhiệt độ +</button>
-      <button class="btn-temp" onclick="send('tempdown')">Nhiệt độ −</button>
 
-      <button class="btn-mode" onclick="send('cool')">Làm lạnh</button>
-      <button class="btn-mode" onclick="send('dry')">Hút ẩm</button>
-      <button class="btn-mode" onclick="send('fan')">Quạt</button>
-      <button class="btn-mode" onclick="send('auto')">Tự động</button>
-      <button class="btn-mode full" onclick="send('heat')">Sưởi</button>
+  <!-- ================= MACHINES ================= -->
 
-      <div class="section-title">Tốc độ quạt</div>
+  <div class="machines">
 
-      <button class="btn-fan" onclick="send('fanauto')">Quạt Auto</button>
-      <button class="btn-fan" onclick="send('fanlow')">Quạt Thấp</button>
-      <button class="btn-fan" onclick="send('fanmed')">Quạt TB</button>
-      <button class="btn-fan" onclick="send('fanhigh')">Quạt Cao</button>
 
-      <div class="section-title">Khác</div>
+    <!-- ================================================= -->
+    <!--                    MÁY LẠNH 1                    -->
+    <!-- ================================================= -->
 
-      <button class="btn-extra" onclick="send('swing')">Cánh gió (Swing)</button>
-      <button class="btn-extra" onclick="send('clean')">Tự làm sạch</button>
+    <div class="card">
+
+      <div class="machine-header">
+
+        <div class="machine-name">
+          Máy lạnh 1
+        </div>
+
+        <div class="device-status">
+
+          <div
+            class="device-dot"
+            id="deviceDot1">
+          </div>
+
+          <span id="deviceStatus1">
+            Chưa có dữ liệu
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <!-- TEMPERATURE -->
+
+      <div class="temp-box">
+
+        <div>
+
+          <span
+            class="temp-value"
+            id="temp1">
+            --
+          </span>
+
+          <span class="temp-unit">
+            °C
+          </span>
+
+        </div>
+
+        <div
+          class="mode-label"
+          id="modeLabel1">
+
+          Chưa có dữ liệu
+
+        </div>
+
+      </div>
+
+
+      <!-- BUTTONS -->
+
+      <div class="grid">
+
+        <button
+          class="btn-on"
+          onclick="sendCommand(1,'on')">
+          Bật
+        </button>
+
+        <button
+          class="btn-off"
+          onclick="sendCommand(1,'off')">
+          Tắt
+        </button>
+
+
+        <button
+          class="btn-temp"
+          onclick="sendCommand(1,'tempup')">
+          Nhiệt độ +
+        </button>
+
+        <button
+          class="btn-temp"
+          onclick="sendCommand(1,'tempdown')">
+          Nhiệt độ −
+        </button>
+
+
+        <button
+          class="btn-mode"
+          onclick="sendCommand(1,'cool')">
+          Làm lạnh
+        </button>
+
+        <button
+          class="btn-mode"
+          onclick="sendCommand(1,'dry')">
+          Hút ẩm
+        </button>
+
+        <button
+          class="btn-mode"
+          onclick="sendCommand(1,'fan')">
+          Quạt
+        </button>
+
+        <button
+          class="btn-mode"
+          onclick="sendCommand(1,'auto')">
+          Tự động
+        </button>
+
+        <button
+          class="btn-mode full"
+          onclick="sendCommand(1,'heat')">
+          Sưởi
+        </button>
+
+
+        <div class="section-title">
+          Tốc độ quạt
+        </div>
+
+
+        <button
+          class="btn-fan"
+          onclick="sendCommand(1,'fanauto')">
+          Quạt Auto
+        </button>
+
+        <button
+          class="btn-fan"
+          onclick="sendCommand(1,'fanlow')">
+          Quạt Thấp
+        </button>
+
+        <button
+          class="btn-fan"
+          onclick="sendCommand(1,'fanmed')">
+          Quạt TB
+        </button>
+
+        <button
+          class="btn-fan"
+          onclick="sendCommand(1,'fanhigh')">
+          Quạt Cao
+        </button>
+
+
+        <div class="section-title">
+          Khác
+        </div>
+
+
+        <button
+          class="btn-extra"
+          onclick="sendCommand(1,'swing')">
+          Cánh gió (Swing)
+        </button>
+
+        <button
+          class="btn-extra"
+          onclick="sendCommand(1,'clean')">
+          Tự làm sạch
+        </button>
+
+      </div>
+
     </div>
+
+
+
+    <!-- ================================================= -->
+    <!--                    MÁY LẠNH 2                    -->
+    <!-- ================================================= -->
+
+    <div class="card">
+
+      <div class="machine-header">
+
+        <div class="machine-name">
+          Máy lạnh 2
+        </div>
+
+        <div class="device-status">
+
+          <div
+            class="device-dot"
+            id="deviceDot2">
+          </div>
+
+          <span id="deviceStatus2">
+            Chưa có dữ liệu
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <!-- TEMPERATURE -->
+
+      <div class="temp-box">
+
+        <div>
+
+          <span
+            class="temp-value"
+            id="temp2">
+            --
+          </span>
+
+          <span class="temp-unit">
+            °C
+          </span>
+
+        </div>
+
+        <div
+          class="mode-label"
+          id="modeLabel2">
+
+          Chưa có dữ liệu
+
+        </div>
+
+      </div>
+
+
+      <!-- BUTTONS -->
+
+      <div class="grid">
+
+        <button
+          class="btn-on"
+          onclick="sendCommand(2,'on')">
+          Bật
+        </button>
+
+        <button
+          class="btn-off"
+          onclick="sendCommand(2,'off')">
+          Tắt
+        </button>
+
+
+        <button
+          class="btn-temp"
+          onclick="sendCommand(2,'tempup')">
+          Nhiệt độ +
+        </button>
+
+        <button
+          class="btn-temp"
+          onclick="sendCommand(2,'tempdown')">
+          Nhiệt độ −
+        </button>
+
+
+        <button
+          class="btn-mode"
+          onclick="sendCommand(2,'cool')">
+          Làm lạnh
+        </button>
+
+        <button
+          class="btn-mode"
+          onclick="sendCommand(2,'dry')">
+          Hút ẩm
+        </button>
+
+        <button
+          class="btn-mode"
+          onclick="sendCommand(2,'fan')">
+          Quạt
+        </button>
+
+        <button
+          class="btn-mode"
+          onclick="sendCommand(2,'auto')">
+          Tự động
+        </button>
+
+        <button
+          class="btn-mode full"
+          onclick="sendCommand(2,'heat')">
+          Sưởi
+        </button>
+
+
+        <div class="section-title">
+          Tốc độ quạt
+        </div>
+
+
+        <button
+          class="btn-fan"
+          onclick="sendCommand(2,'fanauto')">
+          Quạt Auto
+        </button>
+
+        <button
+          class="btn-fan"
+          onclick="sendCommand(2,'fanlow')">
+          Quạt Thấp
+        </button>
+
+        <button
+          class="btn-fan"
+          onclick="sendCommand(2,'fanmed')">
+          Quạt TB
+        </button>
+
+        <button
+          class="btn-fan"
+          onclick="sendCommand(2,'fanhigh')">
+          Quạt Cao
+        </button>
+
+
+        <div class="section-title">
+          Khác
+        </div>
+
+
+        <button
+          class="btn-extra"
+          onclick="sendCommand(2,'swing')">
+          Cánh gió (Swing)
+        </button>
+
+        <button
+          class="btn-extra"
+          onclick="sendCommand(2,'clean')">
+          Tự làm sạch
+        </button>
+
+      </div>
+
+    </div>
+
   </div>
 
-  <div class="footer">Điều khiển qua MQTT • HiveMQ</div>
 
-  <script>
-    // ====== CẤU HÌNH – PHẢI GIỐNG VỚI ESP ======
-    const TOPIC_CONTROL = "dcnguyen/funiki/phongngu/control";
-    const TOPIC_STATUS  = "dcnguyen/funiki/phongngu/status";
-    // ==========================================
+  <!-- ================= FOOTER ================= -->
 
-    const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt", {
-      clientId: "web-funiki-" + Math.random().toString(16).substr(2, 8),
+  <footer>
+    Điều khiển qua MQTT • HiveMQ
+  </footer>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!--                       JAVASCRIPT                      -->
+<!-- ===================================================== -->
+
+<script>
+
+  /* =====================================================
+     MQTT TOPICS
+     ===================================================== */
+
+  const TOPICS = {
+
+    1: {
+      control: "dieukhien/funiki/maylanh1/control",
+      status:  "dieukhien/funiki/maylanh1/status"
+    },
+
+    2: {
+      control: "dieukhien/funiki/maylanh2/control",
+      status:  "dieukhien/funiki/maylanh2/status"
+    }
+
+  };
+
+
+  /* =====================================================
+     MQTT CONNECTION
+     ===================================================== */
+
+  const client = mqtt.connect(
+    "wss://broker.hivemq.com:8884/mqtt",
+    {
+
+      clientId:
+        "web-funiki-2may-" +
+        Math.random()
+          .toString(16)
+          .substr(2, 8),
+
       clean: true,
+
       reconnectPeriod: 3000,
+
       connectTimeout: 10000
-    });
 
-    // Mapping mode đúng theo thư viện IRremoteESP8266 (ir_Coolix.h)
-    const modeNames = {
-      0: "Làm lạnh",
-      1: "Hút ẩm",
-      2: "Tự động",
-      3: "Sưởi",
-      4: "Quạt"
-    };
+    }
+  );
 
-    // Mapping tốc độ quạt (Coolix)
-    const fanNames = {
-      0: "Auto0",
-      1: "Cao",
-      2: "Trung bình",
-      4: "Thấp",
-      5: "Auto",
-      6: "Zone Follow",
-      7: "Cố định"
-    };
 
-    function setOnline(online) {
-      const dot = document.getElementById("dot");
-      const text = document.getElementById("statusText");
-      if (online) {
-        dot.className = "dot online";
-        text.textContent = "Đã kết nối";
-      } else {
-        dot.className = "dot offline";
-        text.textContent = "Mất kết nối";
-      }
+  /* =====================================================
+     MODE MAPPING
+     ===================================================== */
+
+  const modeNames = {
+
+    0: "Làm lạnh",
+
+    1: "Hút ẩm",
+
+    2: "Tự động",
+
+    3: "Sưởi",
+
+    4: "Quạt"
+
+  };
+
+
+  /* =====================================================
+     FAN MAPPING
+     ===================================================== */
+
+  const fanNames = {
+
+    0: "Auto0",
+
+    1: "Cao",
+
+    2: "Trung bình",
+
+    4: "Thấp",
+
+    5: "Auto",
+
+    6: "Zone Follow",
+
+    7: "Cố định"
+
+  };
+
+
+  /* =====================================================
+     MQTT GLOBAL STATUS
+     ===================================================== */
+
+  function setMQTTOnline(online) {
+
+    const dot =
+      document.getElementById("mqttDot");
+
+    const text =
+      document.getElementById("mqttStatus");
+
+
+    if (online) {
+
+      dot.className =
+        "mqtt-dot online";
+
+      text.textContent =
+        "MQTT đã kết nối";
+
     }
 
-    client.on("connect", () => {
-      console.log("✅ MQTT Connected");
-      setOnline(true);
-      client.subscribe(TOPIC_STATUS);
-    });
+    else {
 
-    client.on("close", () => setOnline(false));
-    client.on("offline", () => setOnline(false));
-    client.on("error", (err) => {
-      console.error("❌ MQTT Error:", err);
-      setOnline(false);
-    });
+      dot.className =
+        "mqtt-dot offline";
 
-    client.on("message", (topic, payload) => {
-      if (topic !== TOPIC_STATUS) return;
-      try {
-        const data = JSON.parse(payload.toString());
-        document.getElementById("temp").textContent = data.temp ?? "--";
+      text.textContent =
+        "MQTT mất kết nối";
 
-        let modeText = modeNames[data.mode] || `Mode ${data.mode}`;
-        if (data.power === "off") {
-          modeText = "Đã tắt";
-        } else {
-          const fanText = fanNames[data.fan] || data.fan;
-          modeText += ` • Quạt: ${fanText}`;
-          if (data.swing === "on") modeText += " • Swing";
-          if (data.clean === "on") modeText += " • Clean";
+    }
+
+  }
+
+
+  /* =====================================================
+     DEVICE STATUS
+     ===================================================== */
+
+  function setDeviceStatus(machine, online) {
+
+    const dot =
+      document.getElementById(
+        "deviceDot" + machine
+      );
+
+    const text =
+      document.getElementById(
+        "deviceStatus" + machine
+      );
+
+
+    if (online) {
+
+      dot.className =
+        "device-dot online";
+
+      text.textContent =
+        "Đang hoạt động";
+
+    }
+
+    else {
+
+      dot.className =
+        "device-dot offline";
+
+      text.textContent =
+        "Mất kết nối";
+
+    }
+
+  }
+
+
+  /* =====================================================
+     MQTT CONNECT
+     ===================================================== */
+
+  client.on("connect", () => {
+
+    console.log(
+      "MQTT Connected"
+    );
+
+
+    setMQTTOnline(true);
+
+
+    /* Subscribe STATUS của máy 1 */
+
+    client.subscribe(
+      TOPICS[1].status,
+      (err) => {
+
+        if (err) {
+
+          console.error(
+            "Lỗi subscribe máy 1:",
+            err
+          );
+
         }
-        document.getElementById("modeLabel").textContent = modeText;
-      } catch (e) {
-        console.error("Lỗi parse status", e);
-      }
-    });
 
-    function send(cmd) {
-      if (!client.connected) {
-        alert("Chưa kết nối MQTT!");
-        return;
       }
-      client.publish(TOPIC_CONTROL, cmd);
-      console.log("Gửi lệnh:", cmd);
+    );
+
+
+    /* Subscribe STATUS của máy 2 */
+
+    client.subscribe(
+      TOPICS[2].status,
+      (err) => {
+
+        if (err) {
+
+          console.error(
+            "Lỗi subscribe máy 2:",
+            err
+          );
+
+        }
+
+      }
+    );
+
+  });
+
+
+  /* =====================================================
+     MQTT CLOSE
+     ===================================================== */
+
+  client.on("close", () => {
+
+    setMQTTOnline(false);
+
+  });
+
+
+  /* =====================================================
+     MQTT OFFLINE
+     ===================================================== */
+
+  client.on("offline", () => {
+
+    setMQTTOnline(false);
+
+  });
+
+
+  /* =====================================================
+     MQTT ERROR
+     ===================================================== */
+
+  client.on("error", (err) => {
+
+    console.error(
+      "MQTT Error:",
+      err
+    );
+
+    setMQTTOnline(false);
+
+  });
+
+
+  /* =====================================================
+     RECEIVE STATUS
+     ===================================================== */
+
+  client.on(
+    "message",
+    (topic, payload) => {
+
+      /* =========================
+         XÁC ĐỊNH MÁY
+         ========================= */
+
+      let machine = null;
+
+
+      if (
+        topic === TOPICS[1].status
+      ) {
+
+        machine = 1;
+
+      }
+
+
+      if (
+        topic === TOPICS[2].status
+      ) {
+
+        machine = 2;
+
+      }
+
+
+      /* Không phải status của 2 máy */
+
+      if (!machine) {
+
+        return;
+
+      }
+
+
+      /* =========================
+         PARSE JSON
+         ========================= */
+
+      try {
+
+        const data =
+          JSON.parse(
+            payload.toString()
+          );
+
+
+        console.log(
+          "STATUS máy " +
+          machine +
+          ":",
+          data
+        );
+
+
+        /* =========================
+           DEVICE ONLINE
+           ========================= */
+
+        setDeviceStatus(
+          machine,
+          true
+        );
+
+
+        /* =========================
+           NHIỆT ĐỘ
+           ========================= */
+
+        const temp =
+          document.getElementById(
+            "temp" + machine
+          );
+
+
+        temp.textContent =
+          data.temp ?? "--";
+
+
+        /* =========================
+           MODE
+           ========================= */
+
+        let modeText =
+          modeNames[data.mode] ||
+          `Mode ${data.mode}`;
+
+
+        /* =========================
+           POWER OFF
+           ========================= */
+
+        if (
+          data.power === "off"
+        ) {
+
+          modeText =
+            "Đã tắt";
+
+        }
+
+        else {
+
+          /* =========================
+             FAN
+             ========================= */
+
+          const fanText =
+            fanNames[data.fan] ||
+            data.fan;
+
+
+          modeText +=
+            ` • Quạt: ${fanText}`;
+
+
+          /* =========================
+             SWING
+             ========================= */
+
+          if (
+            data.swing === "on"
+          ) {
+
+            modeText +=
+              " • Swing";
+
+          }
+
+
+          /* =========================
+             CLEAN
+             ========================= */
+
+          if (
+            data.clean === "on"
+          ) {
+
+            modeText +=
+              " • Clean";
+
+          }
+
+        }
+
+
+        /* =========================
+           UPDATE DISPLAY
+           ========================= */
+
+        document.getElementById(
+          "modeLabel" + machine
+        ).textContent =
+          modeText;
+
+
+      }
+
+      catch (e) {
+
+        console.error(
+          "Lỗi parse status:",
+          e
+        );
+
+      }
+
     }
-  </script>
+  );
+
+
+  /* =====================================================
+     SEND COMMAND
+     ===================================================== */
+
+  function sendCommand(
+    machine,
+    command
+  ) {
+
+    /* =========================
+       KIỂM TRA MQTT
+       ========================= */
+
+    if (!client.connected) {
+
+      alert(
+        "Chưa kết nối MQTT!"
+      );
+
+      return;
+
+    }
+
+
+    /* =========================
+       LẤY TOPIC
+       ========================= */
+
+    const topic =
+      TOPICS[machine].control;
+
+
+    /* =========================
+       GỬI LỆNH
+       ========================= */
+
+    client.publish(
+      topic,
+      command
+    );
+
+
+    console.log(
+      "Máy lạnh " +
+      machine +
+      " → " +
+      topic +
+      " → " +
+      command
+    );
+
+  }
+
+
+</script>
+
 </body>
 </html>
+```
