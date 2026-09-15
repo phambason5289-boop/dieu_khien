@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>Máy lạnh Funiki</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --green: #22c55e;
+      --red: #ef4444;
+      --blue: #3b82f6;
+      --purple: #8b5cf6;
+      --orange: #f97316;
+      --teal: #14b8a6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+    h1 { margin: 0 0 6px; font-size: 1.6rem; }
+    .status {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #64748b;
+    }
+    .dot.online { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .dot.offline { background: var(--red); }
+
+    .card {
+      background: var(--card);
+      border-radius: 20px;
+      padding: 28px 24px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.35);
+    }
+    .temp-box {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .temp-value {
+      font-size: 4.5rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .temp-unit { font-size: 1.8rem; vertical-align: super; }
+    .mode-label {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    button {
+      border: none;
+      border-radius: 14px;
+      padding: 16px 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: white;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+    button:active { transform: scale(0.96); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-on   { background: var(--green); }
+    .btn-off  { background: var(--red); }
+    .btn-temp { background: var(--blue); }
+    .btn-mode { background: var(--purple); }
+    .btn-fan  { background: var(--orange); }
+    .btn-extra{ background: var(--teal); }
+    .full { grid-column: span 2; }
+
+    .section-title {
+      grid-column: span 2;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin: 8px 0 0;
+      text-align: center;
+    }
+
+    .footer {
+      margin-top: 24px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <h1>Máy lạnh Funiki</h1>
+  <div class="status">
+    <div class="dot" id="dot"></div>
+    <span id="statusText">Đang kết nối...</span>
+  </div>
+
+  <div class="card">
+    <div class="temp-box">
+      <div>
+        <span class="temp-value" id="temp">--</span>
+        <span class="temp-unit">°C</span>
+      </div>
+      <div class="mode-label" id="modeLabel">Chưa có dữ liệu</div>
+    </div>
+
+    <div class="grid">
+      <button class="btn-on"  onclick="send('on')">Bật</button>
+      <button class="btn-off" onclick="send('off')">Tắt</button>
+
+      <button class="btn-temp" onclick="send('tempup')">Nhiệt độ +</button>
+      <button class="btn-temp" onclick="send('tempdown')">Nhiệt độ −</button>
+
+      <button class="btn-mode" onclick="send('cool')">Làm lạnh</button>
+      <button class="btn-mode" onclick="send('dry')">Hút ẩm</button>
+      <button class="btn-mode" onclick="send('fan')">Quạt</button>
+      <button class="btn-mode" onclick="send('auto')">Tự động</button>
+      <button class="btn-mode full" onclick="send('heat')">Sưởi</button>
+
+      <div class="section-title">Tốc độ quạt</div>
+
+      <button class="btn-fan" onclick="send('fanauto')">Quạt Auto</button>
+      <button class="btn-fan" onclick="send('fanlow')">Quạt Thấp</button>
+      <button class="btn-fan" onclick="send('fanmed')">Quạt TB</button>
+      <button class="btn-fan" onclick="send('fanhigh')">Quạt Cao</button>
+
+      <div class="section-title">Khác</div>
+
+      <button class="btn-extra" onclick="send('swing')">Cánh gió (Swing)</button>
+      <button class="btn-extra" onclick="send('clean')">Tự làm sạch</button>
+    </div>
+  </div>
+
+  <div class="footer">Điều khiển qua MQTT • HiveMQ</div>
+
+  <script>
+    // ====== CẤU HÌNH – PHẢI GIỐNG VỚI ESP ======
+    const TOPIC_CONTROL = "dcnguyen/funiki/phongngu/control";
+    const TOPIC_STATUS  = "dcnguyen/funiki/phongngu/status";
+    // ==========================================
+
+    const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt", {
+      clientId: "web-funiki-" + Math.random().toString(16).substr(2, 8),
+      clean: true,
+      reconnectPeriod: 3000,
+      connectTimeout: 10000
+    });
+
+    // Mapping mode đúng theo thư viện IRremoteESP8266 (ir_Coolix.h)
+    const modeNames = {
+      0: "Làm lạnh",
+      1: "Hút ẩm",
+      2: "Tự động",
+      3: "Sưởi",
+      4: "Quạt"
+    };
+
+    // Mapping tốc độ quạt (Coolix)
+    const fanNames = {
+      0: "Auto0",
+      1: "Cao",
+      2: "Trung bình",
+      4: "Thấp",
+      5: "Auto",
+      6: "Zone Follow",
+      7: "Cố định"
+    };
+
+    function setOnline(online) {
+      const dot = document.getElementById("dot");
+      const text = document.getElementById("statusText");
+      if (online) {
+        dot.className = "dot online";
+        text.textContent = "Đã kết nối";
+      } else {
+        dot.className = "dot offline";
+        text.textContent = "Mất kết nối";
+      }
+    }
+
+    client.on("connect", () => {
+      console.log("✅ MQTT Connected");
+      setOnline(true);
+      client.subscribe(TOPIC_STATUS);
+    });
+
+    client.on("close", () => setOnline(false));
+    client.on("offline", () => setOnline(false));
+    client.on("error", (err) => {
+      console.error("❌ MQTT Error:", err);
+      setOnline(false);
+    });
+
+    client.on("message", (topic, payload) => {
+      if (topic !== TOPIC_STATUS) return;
+      try {
+        const data = JSON.parse(payload.toString());
+        document.getElementById("temp").textContent = data.temp ?? "--";
+
+        let modeText = modeNames[data.mode] || `Mode ${data.mode}`;
+        if (data.power === "off") {
+          modeText = "Đã tắt";
+        } else {
+          const fanText = fanNames[data.fan] || data.fan;
+          modeText += ` • Quạt: ${fanText}`;
+          if (data.swing === "on") modeText += " • Swing";
+          if (data.clean === "on") modeText += " • Clean";
+        }
+        document.getElementById("modeLabel").textContent = modeText;
+      } catch (e) {
+        console.error("Lỗi parse status", e);
+      }
+    });
+
+    function send(cmd) {
+      if (!client.connected) {
+        alert("Chưa kết nối MQTT!");
+        return;
+      }
+      client.publish(TOPIC_CONTROL, cmd);
+      console.log("Gửi lệnh:", cmd);
+    }
+  </script>
+</body>
+</html>
